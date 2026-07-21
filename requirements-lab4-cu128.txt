@@ -1,0 +1,25 @@
+# Clean CUDA environment for lab4.
+#
+# Do not install this into the existing .venv-cuda, because that environment was
+# created with include-system-site-packages=true and currently imports torch from
+# the conda yolo environment.
+
+--index-url https://pypi.org/simple
+--extra-index-url https://download.pytorch.org/whl/cu128
+--extra-index-url https://pypi.nvidia.com/
+
+torch==2.8.0
+torchvision==0.23.0
+numpy<2.5
+
+-e ./dependencies/dependencies/mjlab
+
+ipykernel
+jupyter
+nbclient
+nbformat
+matplotlib
+opencv-python
+gymnasium[atari,accept-rom-license]
+ale-py
+autorom[accept-rom-license]

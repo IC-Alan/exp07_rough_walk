@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "terrain-generator"
+version = "0.1.0"
+description = "Procedural terrain generation with Wave Function Collapse and pyrender visualization"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "matplotlib>=3.3",
+    "networkx",
+    "numpy>=1.23",
+    "pyrender",
+    "rtree",
+    "scipy",
+    "torch",
+    "trimesh",
+]
+
+[project.optional-dependencies]
+sdf = ["open3d"]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[project.scripts]
+terrain-generator = "generator.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["generator*"]
