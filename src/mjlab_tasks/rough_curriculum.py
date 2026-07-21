@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, NotRequired, TypedDict, cast
+from typing import TYPE_CHECKING, TypedDict, cast
 
+try:
+    from typing import NotRequired
+except ImportError:
+    from typing_extensions import NotRequired
+    
 import torch
 from mjlab.tasks.velocity.mdp import UniformVelocityCommandCfg
 
