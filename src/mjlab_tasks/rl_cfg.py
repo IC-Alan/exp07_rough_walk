@@ -9,8 +9,17 @@ from mjlab.rl import RslRlModelCfg, RslRlOnPolicyRunnerCfg, RslRlPpoAlgorithmCfg
 
 from .env_cfgs import DEFAULT_MOTION_PATH, DEFAULT_STUDENT_PATH, ObservationMode
 
-_VISION_MODEL = "mjlab.rl.spatial_softmax:SpatialSoftmaxCNNModel"
+_VISION_MODEL = "CNNModel"
 _VISION_CNN = {
+  "output_channels": [16, 32, 64],
+  "kernel_size": [5, 3, 3],
+  "stride": [2, 2, 1],
+  "padding": "zeros",
+  "activation": "elu",
+  "max_pool": False,
+  "global_pool": "avg",
+}
+_VISION_CNN_LEGACY = {
   "output_channels": [16, 32],
   "kernel_size": [5, 3],
   "stride": [2, 2],
@@ -55,7 +64,7 @@ def course_g1_amp_ppo_runner_cfg(
       class_name=_VISION_MODEL,
       distribution_cfg={
         "class_name": "GaussianDistribution",
-        "init_std": 0.8,
+        "init_std": 0.2,
         "std_type": "scalar",
       },
     )
@@ -104,3 +113,102 @@ def course_g1_amp_ppo_runner_cfg(
     num_steps_per_env=24,
     max_iterations=600,
   )
+
+
+@dataclass
+class DistillationAlgorithmCfg:
+  """Config fields for :class:`src.amp.dagger.DaggerDistillation`."""
+
+  class_name: str = "src.amp.dagger:DaggerDistillation"
+  num_learning_epochs: int = 2
+  gradient_length: int = 15
+  learning_rate: float = 1.0e-3
+  max_grad_norm: float = 1.0
+  loss_type: str = "mse"
+  optimizer: str = "adam"
+  teacher_mix_start: float = 1.0
+  teacher_mix_end: float = 0.0
+  teacher_mix_decay_iters: int = 300
+  height_loss_coef: float = 0.2
+  height_target_key: str = "height_target"
+  student_init_std: float = 0.1
+
+
+@dataclass
+class RslRlDistillationRunnerCfg:
+  """Minimal runner cfg matching RSL-RL DistillationRunner fields."""
+
+  class_name: str = "src.amp.runner:MjlabDistillationRunner"
+  seed: int = 42
+  num_steps_per_env: int = 24
+  max_iterations: int = 400
+  obs_groups: dict[str, tuple[str, ...]] = None  # type: ignore[assignment]
+  save_interval: int = 50
+  experiment_name: str = "exp07_rough_distill_depth"
+  run_name: str = "dagger"
+  logger: str = "tensorboard"
+  wandb_project: str = "mjlab"
+  wandb_tags: tuple[str, ...] = ()
+  resume: bool = False
+  load_run: str = ".*"
+  load_checkpoint: str = "model_.*.pt"
+  clip_actions: float | None = None
+  upload_model: bool = False
+  student: RslRlModelCfg = None  # type: ignore[assignment]
+  teacher: RslRlModelCfg = None  # type: ignore[assignment]
+  algorithm: DistillationAlgorithmCfg = None  # type: ignore[assignment]
+
+
+def course_g1_distill_runner_cfg(
+  student_path: str | Path = DEFAULT_STUDENT_PATH,
+  *,
+  teacher_mix_decay_iters: int = 300,
+  height_loss_coef: float = 0.2,
+  student_init_std: float = 0.1,
+) -> RslRlDistillationRunnerCfg:
+  """Height teacher + depth student DAgger configuration."""
+  del student_path  # kept for API symmetry with PPO cfg
+  student = RslRlModelCfg(
+    hidden_dims=(256, 128),
+    activation="elu",
+    obs_normalization=True,
+    cnn_cfg=dict(_VISION_CNN),
+    class_name=_VISION_MODEL,
+    distribution_cfg={
+      "class_name": "GaussianDistribution",
+      "init_std": student_init_std,
+      "std_type": "scalar",
+    },
+  )
+  teacher = RslRlModelCfg(
+    hidden_dims=(256, 128),
+    activation="elu",
+    obs_normalization=True,
+    distribution_cfg={
+      "class_name": "GaussianDistribution",
+      "init_std": 0.1,
+      "std_type": "scalar",
+    },
+  )
+  algorithm = DistillationAlgorithmCfg(
+    teacher_mix_decay_iters=teacher_mix_decay_iters,
+    height_loss_coef=height_loss_coef,
+    student_init_std=student_init_std,
+  )
+  return RslRlDistillationRunnerCfg(
+    student=student,
+    teacher=teacher,
+    algorithm=algorithm,
+    obs_groups={
+      "student": ("actor", "depth"),
+      "teacher": ("teacher",),
+    },
+    experiment_name="exp07_rough_distill_depth",
+    run_name="dagger",
+    logger="tensorboard",
+    upload_model=False,
+    save_interval=50,
+    num_steps_per_env=24,
+    max_iterations=400,
+  )
+

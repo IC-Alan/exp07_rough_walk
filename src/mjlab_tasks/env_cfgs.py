@@ -35,6 +35,8 @@ def course_g1_rough_walk_env_cfg(
   observation_mode: ObservationMode = "height",
   play: bool = False,
   student_path: str | Path = DEFAULT_STUDENT_PATH,
+  *,
+  walk_focus: bool | None = None,
 ) -> ManagerBasedRlEnvCfg:
   """Return a G1 rough-terrain cfg while preserving the 29-D native action."""
   if observation_mode not in ("height", "depth"):
@@ -74,6 +76,22 @@ def course_g1_rough_walk_env_cfg(
 
   if observation_mode == "depth":
     actor_terms = cfg.observations["actor"].terms
+    # Student actor must not see privileged height. Keep a frozen-teacher view
+    # and a dense height target for optional reconstruction distillation.
+    teacher_terms = dict(actor_terms)
+    cfg.observations["teacher"] = ObservationGroupCfg(
+      terms=teacher_terms,
+      concatenate_terms=True,
+      enable_corruption=False,
+    )
+    # Prefer critic height (no observation noise) as reconstruction target.
+    critic_height = cfg.observations["critic"].terms.get("height_scan")
+    height_scan_term = critic_height or actor_terms["height_scan"]
+    cfg.observations["height_target"] = ObservationGroupCfg(
+      terms={"height_scan": height_scan_term},
+      concatenate_terms=True,
+      enable_corruption=False,
+    )
     actor_terms.pop("height_scan", None)
     depth_sensor = CameraSensorCfg(
       name="depth",
@@ -117,6 +135,19 @@ def course_g1_rough_walk_env_cfg(
   cfg.rewards["foot_clearance"].weight = -1.0
   cfg.rewards["foot_slip"].weight = -0.18
   cfg.rewards["soft_landing"].weight = -2.0e-5
+
+  # Depth (and early walk debugging) should not over-reward safe standing.
+  # Keep scale_rewards_by_dt=True; raise tracking relative to posture terms.
+  if walk_focus is None:
+    walk_focus = observation_mode == "depth"
+  if walk_focus:
+    cfg.rewards["rough_task"].weight = 8.0
+    cfg.rewards["student_smoothness"].weight = -0.01
+    cfg.rewards["upright"].weight = 0.7
+    if "pose" in cfg.rewards:
+      cfg.rewards["pose"].weight = 0.45
+    if "action_rate_l2" in cfg.rewards:
+      cfg.rewards["action_rate_l2"].weight = -0.04
 
   twist_cmd = cfg.commands["twist"]
   if not isinstance(twist_cmd, UniformVelocityCommandCfg):
