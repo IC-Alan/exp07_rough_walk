@@ -365,7 +365,21 @@ def _inference_runner(
   env = ManagerBasedRlEnv(env_cfg, device=device, render_mode=render_mode)
   wrapped = ManualResetAmpVecEnvWrapper(env)
   runner = MjlabOnPolicyRunner(wrapped, asdict(agent_cfg), device=device)
-  runner.load(str(checkpoint), load_cfg=LOAD_CFG)
+  # Distillation checkpoints only carry student/actor weights; PPO checkpoints
+  # carry critic + discriminator as well.  Detect and load accordingly.
+  loaded = torch.load(str(checkpoint), map_location=device, weights_only=False)
+  is_distill = "student_state_dict" in loaded or (
+    "actor_state_dict" in loaded and "critic_state_dict" not in loaded
+  )
+  if is_distill:
+    actor_sd = loaded.get("actor_state_dict") or loaded.get("student_state_dict")
+    missing, unexpected = runner.alg._raw_actor.load_state_dict(actor_sd, strict=False)
+    if missing:
+      print(f"[evaluate] actor missing keys: {missing}")
+    if unexpected:
+      print(f"[evaluate] actor unexpected keys: {unexpected}")
+  else:
+    runner.load(str(checkpoint), load_cfg=LOAD_CFG)
   return env, wrapped, runner
 
 
