@@ -106,11 +106,21 @@ class DaggerDistillation(Distillation):
     with torch.no_grad():
       teacher_mean = self.teacher(obs, stochastic_output=False)
     student_action = self.student(obs, stochastic_output=True).detach()
-    mixed = self.beta * teacher_mean + (1.0 - self.beta) * student_action
-    self.transition.actions = mixed
+    # DAgger: select teacher OR student per environment rather than blending
+    # their joint targets. A linear blend produces an action neither policy
+    # would take, corrupting the on-policy state distribution the student must
+    # learn to recover from. Per-env Bernoulli(beta) selection keeps every
+    # rollout coherent while still shifting coverage toward the student.
+    num_envs = teacher_mean.shape[0]
+    use_teacher = (
+      torch.rand(num_envs, device=teacher_mean.device) < self.beta
+    ).unsqueeze(-1)
+    executed = torch.where(use_teacher, teacher_mean, student_action)
+    self.transition.actions = executed
+    # Supervision is always the teacher's deterministic mean on visited states.
     self.transition.privileged_actions = teacher_mean.detach()
     self.transition.observations = obs
-    return mixed
+    return executed
 
   def update(self) -> dict[str, float]:
     self.num_updates += 1
