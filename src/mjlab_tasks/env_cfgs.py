@@ -37,8 +37,16 @@ def course_g1_rough_walk_env_cfg(
   student_path: str | Path = DEFAULT_STUDENT_PATH,
   *,
   walk_focus: bool | None = None,
+  max_terrain_rows: int | None = None,
 ) -> ManagerBasedRlEnvCfg:
-  """Return a G1 rough-terrain cfg while preserving the 29-D native action."""
+  """Return a G1 rough-terrain cfg while preserving the 29-D native action.
+
+  Args:
+    max_terrain_rows: Cap the number of terrain difficulty rows.  Defaults to
+        6 (training) / 1 (play).  Set to 3-4 during DAgger to prevent the
+        curriculum from advancing the student into hard terrain before it has
+        stabilised.
+  """
   if observation_mode not in ("height", "depth"):
     raise ValueError(f"Unknown observation mode: {observation_mode}")
   student_path = str(Path(student_path).resolve())
@@ -55,7 +63,8 @@ def course_g1_rough_walk_env_cfg(
     cfg.scene.terrain.max_init_terrain_level = 1
     generator = cfg.scene.terrain.terrain_generator
     if generator is not None:
-      generator.num_rows = 6
+      rows = max_terrain_rows if max_terrain_rows is not None else (1 if play else 6)
+      generator.num_rows = max(1, rows)
       generator.curriculum = not play
 
   for sensor in cfg.scene.sensors or ():

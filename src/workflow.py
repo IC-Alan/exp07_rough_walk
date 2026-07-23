@@ -220,7 +220,10 @@ def train_distill(
     raise RuntimeError(f"Requested {device}, but CUDA is not available")
   student_path = _student_path(student_file)
   env_cfg = course_g1_rough_walk_env_cfg(
-    "depth", student_path=student_path, walk_focus=True
+    "depth", student_path=student_path, walk_focus=True,
+    max_terrain_rows=3,  # cap at 3 rows during DAgger: student has no height_scan
+                         # so the curriculum should not advance to hard terrain
+                         # (level 4-5) before student-only phase has stabilised
   )
   env_cfg.scene.num_envs = num_envs
   env_cfg.seed = seed
