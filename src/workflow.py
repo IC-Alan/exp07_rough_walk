@@ -23,6 +23,7 @@ from src.mjlab_tasks.env_cfgs import (
 from src.mjlab_tasks.rl_cfg import (
   course_g1_amp_ppo_runner_cfg,
   course_g1_distill_runner_cfg,
+  course_g1_distill_finetune_runner_cfg,
 )
 from src.paths import EXP_ROOT
 
@@ -253,14 +254,40 @@ def finetune_from_distill(
   distill_checkpoint: str | Path,
   *,
   num_envs: int = 128,
-  iterations: int = 300,
+  iterations: int = 150,
   steps_per_env: int = 24,
   device: str = "cuda:0",
   seed: int = 7,
   student_file: str | Path | None = None,
-  amp_reward_scale: float = 0.2,
+  amp_reward_scale: float = 0.0,
+  distill_coef: float = 1.0,
+  distill_coef_end: float = 0.05,
+  distill_decay_iters: int | None = None,
 ) -> Path:
-  """PPO-finetune a distilled depth student with reduced AMP weight."""
+  """PPO-finetune a distilled depth student with teacher distillation regularisation.
+
+  The frozen height teacher (loaded from *distill_checkpoint*) provides a
+  distillation loss ``distill_coef * MSE(student_mean, teacher_mean)`` after
+  every PPO update.  The coefficient decays from *distill_coef* to
+  *distill_coef_end* over *distill_decay_iters* iterations, preventing PPO
+  from pulling the student back to a standing local optimum.
+
+  Args:
+    distill_checkpoint: Path to a DAgger distillation checkpoint that
+        contains both ``actor_state_dict`` (student) and
+        ``teacher_state_dict`` (frozen height teacher).
+    num_envs: Parallel simulation environments.
+    iterations: PPO update iterations.
+    steps_per_env: Rollout steps per env per iteration.
+    device: Torch device string.
+    seed: RNG seed.
+    student_file: Optional override for student.py path.
+    amp_reward_scale: AMP style-reward weight (0 = pure PPO).
+    distill_coef: Initial distillation loss coefficient λ_start.
+    distill_coef_end: Final distillation loss coefficient λ_end.
+    distill_decay_iters: Iterations to decay λ over (defaults to
+        ``max(1, iterations)``).
+  """
   if device.startswith("cuda") and not torch.cuda.is_available():
     raise RuntimeError(f"Requested {device}, but CUDA is not available")
   student_path = _student_path(student_file)
@@ -269,17 +296,19 @@ def finetune_from_distill(
   )
   env_cfg.scene.num_envs = num_envs
   env_cfg.seed = seed
-  agent_cfg = course_g1_amp_ppo_runner_cfg("depth", student_path=student_path)
-  agent_cfg.max_iterations = iterations
+  decay = distill_decay_iters if distill_decay_iters is not None else max(1, iterations)
+  agent_cfg = course_g1_distill_finetune_runner_cfg(
+    student_path=student_path,
+    iterations=iterations,
+    distill_coef=distill_coef,
+    distill_coef_end=distill_coef_end,
+    distill_decay_iters=decay,
+    amp_reward_scale=amp_reward_scale,
+  )
   agent_cfg.num_steps_per_env = steps_per_env
-  agent_cfg.save_interval = max(1, min(50, iterations))
-  agent_cfg.algorithm.amp_reward_scale = amp_reward_scale
-  # Keep exploration modest after imitation.
-  if agent_cfg.actor.distribution_cfg is not None:
-    agent_cfg.actor.distribution_cfg["init_std"] = 0.15
   timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
   log_dir = (
-    EXP_ROOT / "outputs" / "rsl_rl" / f"{agent_cfg.experiment_name}_finetune" / timestamp
+    EXP_ROOT / "outputs" / "rsl_rl" / f"{agent_cfg.experiment_name}_distill_ft" / timestamp
   )
   log_dir.mkdir(parents=True, exist_ok=True)
   env = ManagerBasedRlEnv(env_cfg, device=device)
@@ -287,18 +316,47 @@ def finetune_from_distill(
   runner = MjlabOnPolicyRunner(
     wrapped, asdict(agent_cfg), log_dir=str(log_dir), device=device
   )
+  # Load checkpoint: actor (student) weights + teacher weights for distillation.
   loaded = torch.load(str(distill_checkpoint), map_location=device, weights_only=False)
   actor_sd = loaded.get("actor_state_dict") or loaded.get("student_state_dict")
   if actor_sd is None:
     raise KeyError(
       f"Distill checkpoint {distill_checkpoint} has no student/actor state_dict"
     )
-  # Distill checkpoints lack AMP discriminator / critic; load actor weights only.
   missing, unexpected = runner.alg._raw_actor.load_state_dict(actor_sd, strict=False)
   if missing:
     print(f"finetune actor missing keys: {missing}")
   if unexpected:
     print(f"finetune actor unexpected keys: {unexpected}")
+  # Wire the frozen teacher into AmpPPOWithDistill for regularisation.
+  teacher_sd = loaded.get("teacher_state_dict")
+  if teacher_sd is not None and hasattr(runner.alg, "set_teacher_for_distill"):
+    from rsl_rl.utils import resolve_callable
+    from src.mjlab_tasks.rl_cfg import course_g1_distill_runner_cfg
+    tmp_cfg = course_g1_distill_runner_cfg(student_path=student_path)
+    teacher_cls = resolve_callable(tmp_cfg.teacher.class_name)
+    obs_dummy = wrapped.get_observations().to(device)
+    teacher_model = teacher_cls(
+      obs_dummy,
+      {"teacher": ("teacher",)},
+      "teacher",
+      wrapped.num_actions,
+      hidden_dims=tmp_cfg.teacher.hidden_dims,
+      activation=tmp_cfg.teacher.activation,
+      obs_normalization=tmp_cfg.teacher.obs_normalization,
+    ).to(device)
+    if "std" in teacher_sd:
+      teacher_sd["distribution.std_param"] = teacher_sd.pop("std")
+    if "log_std" in teacher_sd:
+      teacher_sd["distribution.log_std_param"] = teacher_sd.pop("log_std")
+    teacher_model.load_state_dict(teacher_sd, strict=False)
+    runner.alg.set_teacher_for_distill(teacher_model)
+    print("Distillation teacher loaded for Phase-3 regularisation.")
+  else:
+    print(
+      "Warning: no teacher_state_dict in checkpoint or algorithm does not support "
+      "distillation regularisation — running plain PPO finetune."
+    )
   try:
     runner.learn(num_learning_iterations=iterations)
   finally:

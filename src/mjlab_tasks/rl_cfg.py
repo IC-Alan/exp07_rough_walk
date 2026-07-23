@@ -212,3 +212,106 @@ def course_g1_distill_runner_cfg(
     max_iterations=400,
   )
 
+
+@dataclass
+class AmpPpoWithDistillAlgorithmCfg(AmpPpoAlgorithmCfg):
+  """Algorithm config for :class:`src.amp.ppo.AmpPPOWithDistill`.
+
+  Adds distillation regularisation fields on top of the standard AmpPPO
+  hyperparameters.  The teacher model is loaded at runtime by
+  :func:`finetune_from_distill`; this config only carries the hyper-params.
+  """
+
+  class_name: str = "src.amp.ppo:AmpPPOWithDistill"
+  teacher_obs_key: str = "teacher"
+  distill_coef: float = 1.0
+  distill_coef_end: float = 0.05
+  distill_decay_iters: int = 100
+  distill_batch_size: int = 512
+
+
+def course_g1_distill_finetune_runner_cfg(
+  student_path: str | Path = DEFAULT_STUDENT_PATH,
+  motion_path: str | Path = DEFAULT_MOTION_PATH,
+  *,
+  iterations: int = 150,
+  distill_coef: float = 1.0,
+  distill_coef_end: float = 0.05,
+  distill_decay_iters: int = 100,
+  amp_reward_scale: float = 0.0,
+  student_init_std: float = 0.15,
+) -> RslRlOnPolicyRunnerCfg:
+  """Depth-student PPO finetune that keeps a frozen teacher for regularisation.
+
+  The algorithm is :class:`AmpPPOWithDistill`: after every standard PPO + AMP
+  update it adds ``distill_coef * MSE(student_mean, teacher_mean)`` to the
+  actor.  The coefficient decays linearly over *distill_decay_iters* updates.
+
+  The *teacher* obs group is included in ``obs_groups`` so the rollout buffer
+  stores the privileged height-scan obs required by the distillation pass.
+
+  Args:
+    student_path: Path to student.py formula file.
+    motion_path: Path to G1 expert motion NPZ.
+    iterations: Number of PPO update iterations.
+    distill_coef: Initial distillation loss weight (λ_start).
+    distill_coef_end: Final distillation loss weight (λ_end).
+    distill_decay_iters: Iterations over which λ decays from start to end.
+    amp_reward_scale: AMP style reward scale (default 0 = pure PPO).
+    student_init_std: Initial action std for the depth actor.
+  """
+  actor = RslRlModelCfg(
+    hidden_dims=(256, 128),
+    activation="elu",
+    obs_normalization=True,
+    cnn_cfg=dict(_VISION_CNN),
+    class_name=_VISION_MODEL,
+    distribution_cfg={
+      "class_name": "GaussianDistribution",
+      "init_std": student_init_std,
+      "std_type": "scalar",
+    },
+  )
+  algorithm = AmpPpoWithDistillAlgorithmCfg(
+    value_loss_coef=1.0,
+    use_clipped_value_loss=True,
+    clip_param=0.2,
+    entropy_coef=0.005,
+    num_learning_epochs=2,
+    num_mini_batches=2,
+    learning_rate=3.0e-4,
+    schedule="adaptive",
+    gamma=0.99,
+    lam=0.95,
+    desired_kl=0.01,
+    max_grad_norm=1.0,
+    motion_path=str(Path(motion_path).resolve()),
+    student_path=str(Path(student_path).resolve()),
+    amp_reward_scale=amp_reward_scale,
+    distill_coef=distill_coef,
+    distill_coef_end=distill_coef_end,
+    distill_decay_iters=distill_decay_iters,
+  )
+  # Include "teacher" obs group so the rollout buffer stores height-scan obs
+  # that the distillation pass needs for teacher forward passes.
+  obs_groups = {
+    "actor": ("actor", "depth"),
+    "critic": ("critic",),
+    "teacher": ("teacher",),
+  }
+  return RslRlOnPolicyRunnerCfg(
+    actor=actor,
+    critic=RslRlModelCfg(
+      hidden_dims=(256, 128), activation="elu", obs_normalization=True
+    ),
+    algorithm=algorithm,
+    obs_groups=obs_groups,
+    experiment_name="exp07_rough_amp_depth_finetune",
+    run_name="distill_ft",
+    logger="tensorboard",
+    upload_model=False,
+    save_interval=max(1, min(50, iterations)),
+    num_steps_per_env=24,
+    max_iterations=iterations,
+  )
+
