@@ -173,8 +173,9 @@ def course_g1_rough_walk_env_cfg(
   # (not world Z). Raise the target above the stock 0.1 m so feet clear stair
   # edges, and strengthen the swing-height penalty so it is actually enforced.
   if "foot_swing_height" in cfg.rewards:
-    cfg.rewards["foot_swing_height"].params["target_height"] = 0.16  # up from 0.14
-    cfg.rewards["foot_swing_height"].weight = -1.0   # up from -0.5
+    # Moderate weight: too strong (-1.0) + body_ang_vel collapse taught "stand still".
+    cfg.rewards["foot_swing_height"].params["target_height"] = 0.14
+    cfg.rewards["foot_swing_height"].weight = -0.4
   if "foot_clearance" in cfg.rewards:
     cfg.rewards["foot_clearance"].params["target_height"] = 0.12
     cfg.rewards["foot_clearance"].weight = -2.0
@@ -182,20 +183,20 @@ def course_g1_rough_walk_env_cfg(
   # -----------------------------------------------------------------------
   # Yaw anti-spin: two independent terms
   # -----------------------------------------------------------------------
-  # 1) body_ang_vel: direct penalty on any angular velocity (roll/pitch/yaw).
-  #    The default weight is -0.05, far too weak; the robot happily spins at
-  #    error_vel_yaw~3 with no meaningful gradient. Raise to -1.0 so raw
-  #    rotation is expensive regardless of the commanded yaw.
+  # 1) body_ang_vel: direct penalty on angular velocity.
+  #    IMPORTANT: weight must NOT dominate the walking reward. At -1.0 the
+  #    robot learns "stand still" (zero rotation = zero penalty + max upright).
+  #    Keep it moderate so rotating while walking is costly but walking still
+  #    beats standing.
   if "body_ang_vel" in cfg.rewards:
-    cfg.rewards["body_ang_vel"].weight = -1.0  # was -0.05
+    cfg.rewards["body_ang_vel"].weight = -0.15  # was -0.05; -1.0 caused stand-still collapse
 
   # 2) track_yaw: exponential reward for matching commanded yaw.
-  #    std=0.35 saturates to ≈0 at yaw_error=2.5 (exp(-54)≈0), giving no
-  #    gradient and no learning signal. Use std=2.0 so the reward is ≈0.19
-  #    at error=2.5 and gradient is non-zero across the typical error range.
+  #    std=2.0 avoids saturation at large errors (std=0.35 → exp(-54)≈0 at
+  #    yaw_error=2.5, no learning signal).
   cfg.rewards["track_yaw"] = RewardTermCfg(
     func=mdp.track_angular_velocity,
-    weight=1.5,
+    weight=0.8,
     params={"std": 2.0, "command_name": "twist"},
   )
 
