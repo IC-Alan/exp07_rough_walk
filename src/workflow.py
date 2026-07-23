@@ -515,24 +515,94 @@ def record_video(
   device: str = "cuda:0",
   student_file: str | Path | None = None,
   output: str | Path | None = None,
+  multi_terrain: bool = True,
+  terrain_rows: int = 4,
+  frames_per_terrain: int | None = None,
 ) -> Path:
-  """Record a physical rollout MP4 for inline notebook display."""
+  """Record a physical rollout MP4 for inline notebook display.
+
+  When *multi_terrain* is True (default), the env uses a rough-terrain grid
+  with *terrain_rows* difficulty levels and cycles across terrain types every
+  *frames_per_terrain* frames so the video shows stairs, slopes, flat, etc.
+  """
   if frames < 150:
     raise ValueError("Evaluation videos must contain at least 150 frames")
-  env, wrapped, runner = _inference_runner(
-    checkpoint,
-    mode,
-    num_envs=1,
-    device=device,
-    student_file=student_file,
-    render_mode="rgb_array",
-  )
+  student_path = _student_path(student_file)
+  if multi_terrain:
+    # Full rough generator (not play/traversal) so multiple terrain types exist.
+    env_cfg = course_g1_rough_walk_env_cfg(
+      mode, play=False, student_path=student_path, max_terrain_rows=terrain_rows
+    )
+    env_cfg.scene.num_envs = 1
+    env_cfg.episode_length_s = max(12.0, frames * 0.02 + 2.0)
+    # Fixed forward command for a clean showcase walk.
+    from mjlab.tasks.velocity.mdp import UniformVelocityCommandCfg
+
+    cmd = env_cfg.commands["twist"]
+    if isinstance(cmd, UniformVelocityCommandCfg):
+      cmd.resampling_time_range = (1.0e9, 1.0e9)
+      cmd.heading_command = False
+      cmd.ranges.heading = None
+      cmd.ranges.lin_vel_x = (0.5, 0.5)
+      cmd.ranges.lin_vel_y = (0.0, 0.0)
+      cmd.ranges.ang_vel_z = (0.0, 0.0)
+      cmd.rel_standing_envs = 0.0
+      cmd.rel_heading_envs = 0.0
+      cmd.rel_forward_envs = 1.0
+    agent_cfg = course_g1_amp_ppo_runner_cfg(mode, student_path)
+    env = ManagerBasedRlEnv(env_cfg, device=device, render_mode="rgb_array")
+    wrapped = ManualResetAmpVecEnvWrapper(env)
+    runner = MjlabOnPolicyRunner(wrapped, asdict(agent_cfg), device=device)
+    loaded = torch.load(str(checkpoint), map_location=device, weights_only=False)
+    is_distill = "student_state_dict" in loaded or (
+      "actor_state_dict" in loaded and "critic_state_dict" not in loaded
+    )
+    if is_distill:
+      actor_sd = loaded.get("actor_state_dict") or loaded.get("student_state_dict")
+      runner.alg._raw_actor.load_state_dict(actor_sd, strict=False)
+    else:
+      runner.load(str(checkpoint), load_cfg=LOAD_CFG)
+  else:
+    env, wrapped, runner = _inference_runner(
+      checkpoint,
+      mode,
+      num_envs=1,
+      device=device,
+      student_file=student_file,
+      render_mode="rgb_array",
+    )
   policy = runner.get_inference_policy(device)
   observations = wrapped.get_observations().to(device)
   images: list[np.ndarray] = []
+  # Cycle terrain type / difficulty so the clip shows variety.
+  terrain = env.scene.terrain if hasattr(env.scene, "terrain") else None
+  n_types = 1
+  n_levels = 1
+  if multi_terrain and terrain is not None and hasattr(terrain, "terrain_origins"):
+    n_levels, n_types = int(terrain.terrain_origins.shape[0]), int(
+      terrain.terrain_origins.shape[1]
+    )
+  switch_every = frames_per_terrain or max(60, frames // max(1, n_types * n_levels))
   try:
     with torch.inference_mode():
-      for _ in range(frames):
+      for step_i in range(frames):
+        if multi_terrain and terrain is not None and step_i % switch_every == 0:
+          slot = (step_i // switch_every) % max(1, n_types * n_levels)
+          level = slot // max(1, n_types)
+          ttype = slot % max(1, n_types)
+          env_ids = torch.zeros(1, dtype=torch.long, device=device)
+          if hasattr(terrain, "terrain_levels"):
+            terrain.terrain_levels[env_ids] = level % max(1, n_levels)
+          if hasattr(terrain, "terrain_types"):
+            terrain.terrain_types[env_ids] = ttype % max(1, n_types)
+          if hasattr(terrain, "terrain_origins"):
+            origins = terrain.terrain_origins[
+              terrain.terrain_levels[env_ids], terrain.terrain_types[env_ids]
+            ]
+            env.scene.env_origins[env_ids] = origins
+          # Hard reset robot onto the new terrain patch.
+          env.reset(env_ids=env_ids)
+          observations = wrapped.get_observations().to(device)
         observations, _, _, _ = wrapped.step(policy(observations))
         frame = env.render()
         if frame is None:

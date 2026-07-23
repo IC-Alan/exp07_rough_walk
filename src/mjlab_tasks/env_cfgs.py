@@ -11,6 +11,7 @@ from mjlab.managers.observation_manager import ObservationGroupCfg, ObservationT
 from mjlab.managers.reward_manager import RewardTermCfg
 from mjlab.managers.scene_entity_config import SceneEntityCfg
 from mjlab.sensor import CameraSensorCfg
+from mjlab.tasks.velocity import mdp
 from mjlab.tasks.velocity.config.g1.env_cfgs import unitree_g1_rough_env_cfg
 from mjlab.tasks.velocity.mdp import UniformVelocityCommandCfg
 
@@ -59,11 +60,20 @@ def course_g1_rough_walk_env_cfg(
   cfg.scale_rewards_by_dt = True
   cfg.events["reset_robot_joints"].func = reset_joints_by_offset_batched
 
+  # Rough terrain + G1 body contacts exceed the stock nconmax=70 at init
+  # (mujoco_warp requires nconmax >= mjd.ncon, currently ~182 on rough meshes).
+  # Raise buffers so depth-camera envs and multi-env training can start.
+  cfg.sim.nconmax = max(getattr(cfg.sim, "nconmax", 0) or 0, 256)
+  cfg.sim.njmax = max(getattr(cfg.sim, "njmax", 0) or 0, 3000)
+
   if cfg.scene.terrain is not None:
     cfg.scene.terrain.max_init_terrain_level = 1
     generator = cfg.scene.terrain.terrain_generator
     if generator is not None:
-      rows = max_terrain_rows if max_terrain_rows is not None else (1 if play else 6)
+      # Cap difficulty rows. Reaching level 5-6 too early forces a degenerate
+      # "shuffle + spin" gait (observed error_vel_yaw ~3.2). 4 rows (levels 0-3)
+      # lets the teacher master straight-line stepping before hard stairs.
+      rows = max_terrain_rows if max_terrain_rows is not None else (1 if play else 4)
       generator.num_rows = max(1, rows)
       generator.curriculum = not play
 
@@ -152,10 +162,27 @@ def course_g1_rough_walk_env_cfg(
   if "air_time" in cfg.rewards:
     cfg.rewards["air_time"].weight = 1.0
 
-  # For height mode, allow higher foot swing so the robot can clear stair edges.
-  # The default penalty discourages overshoot on flat terrain; relax it here.
+  # Foot swing/clearance targets are measured by the TerrainHeightSensor, i.e.
+  # foot height RELATIVE TO the terrain sample point directly under each foot
+  # (not world Z). Raise the target above the stock 0.1 m so feet clear stair
+  # edges, and strengthen the swing-height penalty so it is actually enforced.
   if "foot_swing_height" in cfg.rewards:
-    cfg.rewards["foot_swing_height"].weight = -0.05  # was -0.25
+    cfg.rewards["foot_swing_height"].params["target_height"] = 0.14
+    cfg.rewards["foot_swing_height"].weight = -0.5  # was -0.25 / -0.05
+  if "foot_clearance" in cfg.rewards:
+    cfg.rewards["foot_clearance"].params["target_height"] = 0.12
+    cfg.rewards["foot_clearance"].weight = -2.0
+
+  # Independent yaw / heading tracking reward. rough_task folds yaw into a single
+  # exp() term that terrain-survival can drown out (observed error_vel_yaw ~3.2,
+  # i.e. the robot spins instead of walking straight). track_angular_velocity
+  # rewards matching commanded yaw AND penalises unwanted roll/pitch spin, which
+  # is exactly "walk straight when ang_vel_z command is 0".
+  cfg.rewards["track_yaw"] = RewardTermCfg(
+    func=mdp.track_angular_velocity,
+    weight=1.0,
+    params={"std": 0.35, "command_name": "twist"},
+  )
 
   # Depth (and early walk debugging) should not over-reward safe standing.
   # Keep scale_rewards_by_dt=True; raise tracking relative to posture terms.
@@ -185,24 +212,26 @@ def course_g1_rough_walk_env_cfg(
       func=easy_to_hard_commands,
       params={
         "command_name": "twist",
+        # Yaw ranges kept tight so the teacher learns straight-line stair
+        # walking first; wide yaw + hard terrain early causes the spin gait.
         "velocity_stages": [
           {
             "step": 0,
             "lin_vel_x": (0.0, 0.5),
             "lin_vel_y": (-0.1, 0.1),
-            "ang_vel_z": (-0.2, 0.2),
+            "ang_vel_z": (-0.15, 0.15),
           },
           {
             "step": 4_800,
             "lin_vel_x": (0.1, 0.8),
             "lin_vel_y": (-0.2, 0.2),
-            "ang_vel_z": (-0.35, 0.35),
+            "ang_vel_z": (-0.25, 0.25),
           },
           {
             "step": 9_600,
             "lin_vel_x": (0.15, 1.1),
             "lin_vel_y": (-0.3, 0.3),
-            "ang_vel_z": (-0.5, 0.5),
+            "ang_vel_z": (-0.35, 0.35),
           },
         ],
       },
