@@ -173,21 +173,30 @@ def course_g1_rough_walk_env_cfg(
   # (not world Z). Raise the target above the stock 0.1 m so feet clear stair
   # edges, and strengthen the swing-height penalty so it is actually enforced.
   if "foot_swing_height" in cfg.rewards:
-    cfg.rewards["foot_swing_height"].params["target_height"] = 0.14
-    cfg.rewards["foot_swing_height"].weight = -0.5  # was -0.25 / -0.05
+    cfg.rewards["foot_swing_height"].params["target_height"] = 0.16  # up from 0.14
+    cfg.rewards["foot_swing_height"].weight = -1.0   # up from -0.5
   if "foot_clearance" in cfg.rewards:
     cfg.rewards["foot_clearance"].params["target_height"] = 0.12
     cfg.rewards["foot_clearance"].weight = -2.0
 
-  # Independent yaw / heading tracking reward. rough_task folds yaw into a single
-  # exp() term that terrain-survival can drown out (observed error_vel_yaw ~3.2,
-  # i.e. the robot spins instead of walking straight). track_angular_velocity
-  # rewards matching commanded yaw AND penalises unwanted roll/pitch spin, which
-  # is exactly "walk straight when ang_vel_z command is 0".
+  # -----------------------------------------------------------------------
+  # Yaw anti-spin: two independent terms
+  # -----------------------------------------------------------------------
+  # 1) body_ang_vel: direct penalty on any angular velocity (roll/pitch/yaw).
+  #    The default weight is -0.05, far too weak; the robot happily spins at
+  #    error_vel_yaw~3 with no meaningful gradient. Raise to -1.0 so raw
+  #    rotation is expensive regardless of the commanded yaw.
+  if "body_ang_vel" in cfg.rewards:
+    cfg.rewards["body_ang_vel"].weight = -1.0  # was -0.05
+
+  # 2) track_yaw: exponential reward for matching commanded yaw.
+  #    std=0.35 saturates to ≈0 at yaw_error=2.5 (exp(-54)≈0), giving no
+  #    gradient and no learning signal. Use std=2.0 so the reward is ≈0.19
+  #    at error=2.5 and gradient is non-zero across the typical error range.
   cfg.rewards["track_yaw"] = RewardTermCfg(
     func=mdp.track_angular_velocity,
-    weight=1.0,
-    params={"std": 0.35, "command_name": "twist"},
+    weight=1.5,
+    params={"std": 2.0, "command_name": "twist"},
   )
 
   # Depth (and early walk debugging) should not over-reward safe standing.
@@ -225,13 +234,13 @@ def course_g1_rough_walk_env_cfg(
             "step": 0,
             "lin_vel_x": (0.0, 0.5),
             "lin_vel_y": (-0.1, 0.1),
-            "ang_vel_z": (-0.15, 0.15),
+            "ang_vel_z": (-0.05, 0.05),   # nearly straight: force robot to walk forward
           },
           {
             "step": 4_800,
             "lin_vel_x": (0.1, 0.8),
             "lin_vel_y": (-0.2, 0.2),
-            "ang_vel_z": (-0.25, 0.25),
+            "ang_vel_z": (-0.2, 0.2),
           },
           {
             "step": 9_600,

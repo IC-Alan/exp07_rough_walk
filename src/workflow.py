@@ -36,6 +36,14 @@ LOAD_CFG = {
   "iteration": False,
   "rnd": False,
 }
+# Full resume: weights + optimizers + iteration counter + env curriculum step.
+RESUME_LOAD_CFG = {
+  "actor": True,
+  "critic": True,
+  "optimizer": True,
+  "iteration": True,
+  "rnd": False,
+}
 DISTILL_TEACHER_LOAD_CFG = {
   "teacher": True,
   "student": False,
@@ -169,8 +177,17 @@ def train(
   device: str = "cuda:0",
   seed: int = 7,
   student_file: str | Path | None = None,
+  resume_checkpoint: str | Path | None = None,
 ) -> Path:
-  """Train AMP-PPO and return the run directory containing checkpoints."""
+  """Train AMP-PPO and return the run directory containing checkpoints.
+
+  Args:
+    iterations: Target total iterations.  When resuming, only the remaining
+        ``iterations - loaded_iter`` updates are run.
+    resume_checkpoint: Optional path to a ``model_*.pt`` to continue from
+        (loads actor/critic/AMP/optimizers and iteration counter).  Logs
+        continue under the same run directory as the checkpoint.
+  """
   if device.startswith("cuda") and not torch.cuda.is_available():
     raise RuntimeError(f"Requested {device}, but CUDA is not available")
   student_path = _student_path(student_file)
@@ -181,8 +198,15 @@ def train(
   agent_cfg.max_iterations = iterations
   agent_cfg.num_steps_per_env = steps_per_env
   agent_cfg.save_interval = max(1, min(50, iterations))
-  timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-  log_dir = EXP_ROOT / "outputs" / "rsl_rl" / agent_cfg.experiment_name / timestamp
+  if resume_checkpoint is not None:
+    resume_path = Path(resume_checkpoint).resolve()
+    if not resume_path.is_file():
+      raise FileNotFoundError(f"resume_checkpoint not found: {resume_path}")
+    # Keep TensorBoard / checkpoints in the same run folder.
+    log_dir = resume_path.parent
+  else:
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    log_dir = EXP_ROOT / "outputs" / "rsl_rl" / agent_cfg.experiment_name / timestamp
   log_dir.mkdir(parents=True, exist_ok=True)
   env = ManagerBasedRlEnv(env_cfg, device=device)
   wrapped = ManualResetAmpVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
@@ -190,7 +214,20 @@ def train(
     wrapped, asdict(agent_cfg), log_dir=str(log_dir), device=device
   )
   try:
-    runner.learn(num_learning_iterations=iterations)
+    if resume_checkpoint is not None:
+      runner.load(str(resume_path), load_cfg=RESUME_LOAD_CFG)
+      start_it = int(runner.current_learning_iteration)
+      remaining = max(0, int(iterations) - start_it)
+      print(
+        f"Resuming from {resume_path.name} at iter={start_it}; "
+        f"running {remaining} more to reach target {iterations}."
+      )
+      if remaining == 0:
+        print("Already at or past target iterations; nothing to do.")
+      else:
+        runner.learn(num_learning_iterations=remaining)
+    else:
+      runner.learn(num_learning_iterations=iterations)
   finally:
     wrapped.close()
   return log_dir
