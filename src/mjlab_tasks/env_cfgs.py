@@ -145,6 +145,18 @@ def course_g1_rough_walk_env_cfg(
   cfg.rewards["foot_slip"].weight = -0.18
   cfg.rewards["soft_landing"].weight = -2.0e-5
 
+  # air_time: reward each foot for being in the air (swing phase).
+  # This is THE key reward for proper stepping gait; without it the policy
+  # learns to shuffle / drag feet which fails on stairs.
+  # Reference: legged_gym / walk-these-ways use air_time ≈ 1.0.
+  if "air_time" in cfg.rewards:
+    cfg.rewards["air_time"].weight = 1.0
+
+  # For height mode, allow higher foot swing so the robot can clear stair edges.
+  # The default penalty discourages overshoot on flat terrain; relax it here.
+  if "foot_swing_height" in cfg.rewards:
+    cfg.rewards["foot_swing_height"].weight = -0.05  # was -0.25
+
   # Depth (and early walk debugging) should not over-reward safe standing.
   # Keep scale_rewards_by_dt=True; raise tracking relative to posture terms.
   if walk_focus is None:
