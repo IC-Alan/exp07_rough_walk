@@ -1,0 +1,102 @@
+nohup: ignoring input
+/home/yihao/miniconda3/envs/summer1/lib/python3.11/site-packages/glfw/__init__.py:917: GLFWError: (65550) b'X11: The DISPLAY environment variable is missing'
+  warnings.warn(message, GLFWError)
+/home/yihao/miniconda3/envs/summer1/lib/python3.11/site-packages/glfw/__init__.py:917: GLFWError: (65537) b'The GLFW library is not initialized'
+  warnings.warn(message, GLFWError)
+环境初始化完成：29 维动作，83 维 AMP state，mode= height
+代码检查通过；build_amp_state 对应最终 AMP 10 分的一部分
+代码检查通过；LSGAN 公式用于训练稳定性
+代码检查通过；style_reward 对应最终 AMP 10 分的一部分
+代码检查通过；normalize_depth 对应可选 depth 10 分
+代码检查通过；rough_task_reward 对应任务 40 分
+代码检查通过；smoothness_penalty 对应平滑度 20 分
+Checkpoint: /home/alan/Desktop/rl/hw/exp07_rough_walk/outputs/rsl_rl/exp07_rough_amp_height/2026-07-23_20-55-52/model_2999.pt
+Setting seed: 7
+Warp 1.15.0 initialized:
+   CUDA Toolkit 12.9, Driver 13.0
+   Devices:
+     "cpu"      : "x86_64"
+     "cuda:0"   : "NVIDIA GeForce RTX 5080" (15 GiB, sm_120, mempool enabled)
+   Kernel cache:
+     /home/yihao/exp07_rough_walk/outputs/.warp/1.15.0
+Module mujoco_warp._src.smooth c4020f1 load on device 'cuda:0' took 2.10 ms  (cached)
+Module _nxn_broadphase__locals__kernel_cd21dc9b cd21dc9 load on device 'cuda:0' took 0.30 ms  (cached)
+Module ccd_hfield_kernel_builder__locals__ccd_hfield_kernel_bfd33da1 bfd33da load on device 'cuda:0' took 1.47 ms  (cached)
+Module ccd_hfield_kernel_builder__locals__ccd_hfield_kernel_5eb3ffd6 5eb3ffd load on device 'cuda:0' took 1.60 ms  (cached)
+Module _primitive_narrowphase__locals__primitive_narrowphase_5f6e1f92 5f6e1f9 load on device 'cuda:0' took 0.62 ms  (cached)
+Module mujoco_warp._src.constraint 36c8060 load on device 'cuda:0' took 0.24 ms  (cached)
+Module _friction_dof__locals__kernel_3de76fad 3de76fa load on device 'cuda:0' took 0.32 ms  (cached)
+Module _limit_slide_hinge__locals__kernel_b25a8d13 b25a8d1 load on device 'cuda:0' took 0.32 ms  (cached)
+Module _efc_contact_init__locals__kernel_6e7f298a 6e7f298 load on device 'cuda:0' took 0.30 ms  (cached)
+Module _efc_contact_jac_sparse__locals__kernel_a80bb5e9 a80bb5e load on device 'cuda:0' took 0.29 ms  (cached)
+Module _efc_contact_update__locals__kernel_2d2d1a29 2d2d1a2 load on device 'cuda:0' took 0.29 ms  (cached)
+Module mujoco_warp._src.sensor de892d8 load on device 'cuda:0' took 1.88 ms  (cached)
+Module mujoco_warp._src.forward bfd9fb5 load on device 'cuda:0' took 0.83 ms  (cached)
+Module mujoco_warp._src.passive d8c18c6 load on device 'cuda:0' took 1.06 ms  (cached)
+Module mujoco_warp._src.forward b068ad6 load on device 'cuda:0' took 0.92 ms  (cached)
+Module _qfrc_smooth__locals__kernel_3ac7164a 3ac7164 load on device 'cuda:0' took 0.23 ms  (cached)
+Module mujoco_warp._src.support ca784c5 load on device 'cuda:0' took 0.33 ms  (cached)
+Module _tile_cholesky_factorize_solve_block__locals__kernel_6a90e1e3 40a293f load on device 'cuda:0' took 23.35 ms  (cached)
+Module _solve_init_dof__locals__kernel_293c86d1 293c86d load on device 'cuda:0' took 0.26 ms  (cached)
+Module mujoco_warp._src.solver 3a105a0 load on device 'cuda:0' took 1.18 ms  (cached)
+Module _solve_init_jaref_kernel__locals__kernel_c18bf578 c18bf57 load on device 'cuda:0' took 0.30 ms  (cached)
+Module mul_m_kernel__locals___mul_m_4f80c25f 4f80c25 load on device 'cuda:0' took 0.26 ms  (cached)
+Module _update_constraint_efc__locals__kernel_7b921a6e 7b921a6 load on device 'cuda:0' took 0.26 ms  (cached)
+Module _update_constraint_init_qfrc_constraint_sparse__locals__kernel_65a5704f 65a5704 load on device 'cuda:0' took 0.25 ms  (cached)
+Module _update_gradient_zero_grad_dot__locals__kernel_ca4acd13 ca4acd1 load on device 'cuda:0' took 0.25 ms  (cached)
+Module _update_gradient_grad__locals__kernel_9e296ebd 9e296eb load on device 'cuda:0' took 0.24 ms  (cached)
+Module _update_gradient_init_h_sparse__locals__kernel_864e53b1 864e53b load on device 'cuda:0' took 0.24 ms  (cached)
+Module _JTDAJ_sparse__locals__kernel_66cd2906 66cd290 load on device 'cuda:0' took 0.26 ms  (cached)
+Module _JTDAJ_sparse__locals__kernel_66cd2906 f4ed9da load on device 'cuda:0' took 0.25 ms  (cached)
+Module _update_gradient_cholesky_blocked__locals__kernel_c4c2171d ebf350c load on device 'cuda:0' took 47.73 ms  (cached)
+Module _linesearch_jv_fused_kernel__locals__kernel_c2fb89f4 c2fb89f load on device 'cuda:0' took 0.33 ms  (cached)
+Module _linesearch_iterative_kernel__locals__kernel_a612bcb6 3daf78d load on device 'cuda:0' took 0.44 ms  (cached)
+Module _update_constraint_efc__locals__kernel_ddea4c95 ddea4c9 load on device 'cuda:0' took 0.34 ms  (cached)
+Module _update_gradient_zero_grad_dot__locals__kernel_819fe036 819fe03 load on device 'cuda:0' took 0.26 ms  (cached)
+Module _update_gradient_grad__locals__kernel_af49475a af49475 load on device 'cuda:0' took 0.25 ms  (cached)
+Module _update_gradient_h_incremental_sparse__locals__kernel_b9225d2d b9225d2 load on device 'cuda:0' took 0.26 ms  (cached)
+Module _update_gradient_cholesky_blocked_skip_unchanged__locals__kernel_e02e081a c0ca58e load on device 'cuda:0' took 52.93 ms  (cached)
+Module _contact_sort__locals__contact_sort_dd8c4aa8 55b9ea9 load on device 'cuda:0' took 0.41 ms  (cached)
+Module mujoco_warp._src.derivative 833f5d0 load on device 'cuda:0' took 0.70 ms  (cached)
+Module _next_time_builder__locals___next_time_8c8bbcbc 8c8bbcb load on device 'cuda:0' took 0.30 ms  (cached)
+Module reset_data__locals__reset_xfrc_applied_aec370af aec370a load on device 'cuda:0' took 0.28 ms  (cached)
+Module reset_data__locals__reset_M_96396a8d 96396a8 load on device 'cuda:0' took 0.23 ms  (cached)
+Module reset_data__locals__reset_mocap_b321694c b321694 load on device 'cuda:0' took 0.24 ms  (cached)
+Module reset_data__locals__reset_contact_88cd7446 88cd744 load on device 'cuda:0' took 0.26 ms  (cached)
+Module reset_data__locals__reset_sleep_1c5b28e7 1c5b28e load on device 'cuda:0' took 0.23 ms  (cached)
+Module reset_data__locals__reset_nworld_1ba8fb6e 1ba8fb6 load on device 'cuda:0' took 0.29 ms  (cached)
+Module mujoco_warp._src.render_util 97c6606 load on device 'cuda:0' took 0.43 ms  (cached)
+Module mujoco_warp._src.bvh f2c5137 load on device 'cuda:0' took 0.60 ms  (cached)
+Module mujoco_warp._src.ray afebb35 load on device 'cuda:0' took 0.68 ms  (cached)
+
++---------------------------------+
+|         Base Environment        |
++------------------------+--------+
+| Property               | Value  |
++------------------------+--------+
+| Number of environments | 1      |
+| Environment device     | cuda:0 |
+| Environment seed       | 7      |
+| Physics step-size      | 0.005  |
+| Environment step-size  | 0.02   |
++------------------------+--------+
+
+Traceback (most recent call last):
+  File "/home/yihao/exp07_rough_walk/notebook.py", line 235, in <module>
+    video_path = record_multi_terrain(
+                 ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/yihao/exp07_rough_walk/notebook.py", line 193, in record_multi_terrain
+    env, wrapped, runner = _inference_runner(
+                           ^^^^^^^^^^^^^^^^^^
+  File "/home/yihao/exp07_rough_walk/src/workflow.py", line 463, in _inference_runner
+    env = ManagerBasedRlEnv(env_cfg, device=device, render_mode=render_mode)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/yihao/exp07_rough_walk/dependencies/dependencies/mjlab/src/mjlab/envs/manager_based_rl_env.py", line 245, in __init__
+    renderer.initialize()
+  File "/home/yihao/exp07_rough_walk/dependencies/dependencies/mjlab/src/mjlab/viewer/offscreen_renderer.py", line 74, in initialize
+    self._renderer = mujoco.Renderer(
+                     ^^^^^^^^^^^^^^^^
+  File "/home/yihao/miniconda3/envs/summer1/lib/python3.11/site-packages/mujoco/rendering/classic/renderer.py", line 92, in __init__
+    self._mjr_context = mujoco.MjrContext(model, font_scale.value)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+mujoco.FatalError: an OpenGL platform library has not been loaded into this process, this most likely means that a valid OpenGL context has not been created before mjr_makeContext was called
