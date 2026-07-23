@@ -1,0 +1,68 @@
+# summer1 environment for exp07_rough_walk (miniconda + pip/uv)
+# Target: Python 3.11, CUDA 12.8, torch 2.8.0+cu128
+#
+# Install on a machine with miniconda:
+#   conda create -n summer1 python=3.11 pip -y
+#   conda activate summer1
+#   # 1) PyTorch (cu128)
+#   pip install torch==2.8.0 torchvision==0.23.0 --index-url https://download.pytorch.org/whl/cu128
+#   # 2) project deps (from this file, excluding torch lines if already installed)
+#   pip install -r requirements-summer1.txt
+#   # 3) local mjlab (must be inside the repo)
+#   pip install -e ./dependencies/dependencies/mjlab
+#   # 4) optional kernel
+#   python -m ipykernel install --user --name summer1 --display-name "Python (summer1)"
+#
+# Faster with uv:
+#   uv pip install torch==2.8.0 torchvision==0.23.0 --index-url https://download.pytorch.org/whl/cu128
+#   uv pip install -r requirements-summer1.txt
+#   uv pip install -e ./dependencies/dependencies/mjlab
+
+# --- core (install torch separately from cu128 index) ---
+# torch==2.8.0+cu128
+# torchvision==0.23.0+cu128
+
+numpy>=2.0,<2.5
+scipy==1.17.1
+matplotlib==3.11.1
+opencv-python==5.0.0.93
+imageio==2.37.4
+imageio-ffmpeg==0.6.0
+mediapy==1.2.7
+trimesh==4.12.2
+pillow>=12.0
+
+# --- lab stack (also pulled by mjlab; pinned for reproducibility) ---
+mujoco==3.10.0
+mujoco-warp==3.10.0.3
+warp-lang==1.15.0
+rsl-rl-lib==5.4.0
+tensordict==0.13.0
+tensorboard==2.21.0
+tyro==1.0.15
+wandb==0.28.1
+tqdm==4.69.0
+rich==14.3.4
+pyyaml==6.0.3
+absl-py==2.5.0
+etils==1.14.0
+msgspec==0.21.1
+prettytable==3.18.0
+cloudpickle==3.1.2
+onnx==1.22.0
+onnxscript==0.7.1
+torchrunx==0.3.4
+viser==1.0.30
+glfw==2.10.1
+pyopengl==3.1.10
+
+# --- notebook ---
+ipykernel==7.3.0
+ipython==9.15.0
+ipywidgets==8.1.8
+jupyter==1.1.1
+jupyterlab==4.6.2
+notebook==7.6.0
+nbclient==0.11.0
+nbformat==5.10.4
+nbconvert==7.17.1

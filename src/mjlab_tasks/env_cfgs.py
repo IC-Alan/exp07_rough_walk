@@ -62,9 +62,15 @@ def course_g1_rough_walk_env_cfg(
 
   # Rough terrain + G1 body contacts exceed the stock nconmax=70 at init
   # (mujoco_warp requires nconmax >= mjd.ncon, currently ~182 on rough meshes).
-  # Raise buffers so depth-camera envs and multi-env training can start.
-  cfg.sim.nconmax = max(getattr(cfg.sim, "nconmax", 0) or 0, 256)
+  # Raise just enough to clear the overflow. Do NOT over-provision: the EPA
+  # convex-collision buffers scale as nconmax * num_envs * (6 + 5*ccd_iters),
+  # so nconmax=256 + ccd=500 + 1024 envs needs ~13 GB and OOMs an 8 GB card.
+  cfg.sim.nconmax = max(getattr(cfg.sim, "nconmax", 0) or 0, 192)
   cfg.sim.njmax = max(getattr(cfg.sim, "njmax", 0) or 0, 3000)
+  # ccd_iterations=500 (stock) is absurdly high for locomotion and is the main
+  # multiplier on EPA memory. 50 is plenty for box/mesh terrain contacts and
+  # cuts collision buffer memory ~10x, which is what lets 1024 envs fit in 8 GB.
+  cfg.sim.mujoco.ccd_iterations = min(cfg.sim.mujoco.ccd_iterations, 50)
 
   if cfg.scene.terrain is not None:
     cfg.scene.terrain.max_init_terrain_level = 1
