@@ -60,16 +60,10 @@ def course_g1_rough_walk_env_cfg(
   cfg.scale_rewards_by_dt = True
   cfg.events["reset_robot_joints"].func = reset_joints_by_offset_batched
 
-  # Rough terrain + G1 body contacts exceed the stock nconmax=70 at init
-  # (mujoco_warp requires nconmax >= mjd.ncon, currently ~182 on rough meshes).
-  # Raise just enough to clear the overflow. Do NOT over-provision: the EPA
-  # convex-collision buffers scale as nconmax * num_envs * (6 + 5*ccd_iters),
-  # so nconmax=256 + ccd=500 + 1024 envs needs ~13 GB and OOMs an 8 GB card.
+  # Algorithm: same as 2026-07-23_23-34-12-y / git f330bae (台阶优化).
+  # Memory-safe buffers for 8GB GPUs (original nconmax=256+ccd=500 OOMs at 1024 envs).
   cfg.sim.nconmax = max(getattr(cfg.sim, "nconmax", 0) or 0, 192)
   cfg.sim.njmax = max(getattr(cfg.sim, "njmax", 0) or 0, 3000)
-  # ccd_iterations=500 (stock) is absurdly high for locomotion and is the main
-  # multiplier on EPA memory. 50 is plenty for box/mesh terrain contacts and
-  # cuts collision buffer memory ~10x, which is what lets 1024 envs fit in 8 GB.
   cfg.sim.mujoco.ccd_iterations = min(cfg.sim.mujoco.ccd_iterations, 50)
 
   if cfg.scene.terrain is not None:
@@ -173,31 +167,21 @@ def course_g1_rough_walk_env_cfg(
   # (not world Z). Raise the target above the stock 0.1 m so feet clear stair
   # edges, and strengthen the swing-height penalty so it is actually enforced.
   if "foot_swing_height" in cfg.rewards:
-    # Moderate weight: too strong (-1.0) + body_ang_vel collapse taught "stand still".
     cfg.rewards["foot_swing_height"].params["target_height"] = 0.14
-    cfg.rewards["foot_swing_height"].weight = -0.4
+    cfg.rewards["foot_swing_height"].weight = -0.5  # was -0.25 / -0.05
   if "foot_clearance" in cfg.rewards:
     cfg.rewards["foot_clearance"].params["target_height"] = 0.12
     cfg.rewards["foot_clearance"].weight = -2.0
 
-  # -----------------------------------------------------------------------
-  # Yaw anti-spin: two independent terms
-  # -----------------------------------------------------------------------
-  # 1) body_ang_vel: direct penalty on angular velocity.
-  #    IMPORTANT: weight must NOT dominate the walking reward. At -1.0 the
-  #    robot learns "stand still" (zero rotation = zero penalty + max upright).
-  #    Keep it moderate so rotating while walking is costly but walking still
-  #    beats standing.
-  if "body_ang_vel" in cfg.rewards:
-    cfg.rewards["body_ang_vel"].weight = -0.15  # was -0.05; -1.0 caused stand-still collapse
-
-  # 2) track_yaw: exponential reward for matching commanded yaw.
-  #    std=2.0 avoids saturation at large errors (std=0.35 → exp(-54)≈0 at
-  #    yaw_error=2.5, no learning signal).
+  # Independent yaw / heading tracking reward. rough_task folds yaw into a single
+  # exp() term that terrain-survival can drown out (observed error_vel_yaw ~3.2,
+  # i.e. the robot spins instead of walking straight). track_angular_velocity
+  # rewards matching commanded yaw AND penalises unwanted roll/pitch spin, which
+  # is exactly "walk straight when ang_vel_z command is 0".
   cfg.rewards["track_yaw"] = RewardTermCfg(
     func=mdp.track_angular_velocity,
-    weight=0.8,
-    params={"std": 2.0, "command_name": "twist"},
+    weight=1.0,
+    params={"std": 0.35, "command_name": "twist"},
   )
 
   # Depth (and early walk debugging) should not over-reward safe standing.
@@ -235,13 +219,13 @@ def course_g1_rough_walk_env_cfg(
             "step": 0,
             "lin_vel_x": (0.0, 0.5),
             "lin_vel_y": (-0.1, 0.1),
-            "ang_vel_z": (-0.05, 0.05),   # nearly straight: force robot to walk forward
+            "ang_vel_z": (-0.15, 0.15),
           },
           {
             "step": 4_800,
             "lin_vel_x": (0.1, 0.8),
             "lin_vel_y": (-0.2, 0.2),
-            "ang_vel_z": (-0.2, 0.2),
+            "ang_vel_z": (-0.25, 0.25),
           },
           {
             "step": 9_600,
